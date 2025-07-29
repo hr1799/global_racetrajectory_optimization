@@ -3,7 +3,10 @@ import sys
 import time
 import numpy as np
 import casadi as ca
-from global_racetrajectory_optimization import opt_mintime_traj
+from . import approx_friction_map
+from .. import powertrain_src as powertrain
+from . import export_mintime_solution
+from . import result_plots_mintime
 import trajectory_planning_helpers as tph
 
 
@@ -125,8 +128,8 @@ def opt_mintime(reftrack: np.ndarray,
 
     # describe friction coefficients from friction map with linear equations or gaussian basis functions
     if pars["optim_opts"]["var_friction"] is not None:
-        w_mue_fl, w_mue_fr, w_mue_rl, w_mue_rr, center_dist = opt_mintime_traj.src. \
-            approx_friction_map.approx_friction_map(reftrack=reftrack,
+        w_mue_fl, w_mue_fr, w_mue_rl, w_mue_rr, center_dist = approx_friction_map.\
+                                approx_friction_map(reftrack=reftrack,
                                                     normvectors=normvectors,
                                                     tpamap_path=tpamap_path,
                                                     tpadata_path=tpadata_path,
@@ -215,16 +218,16 @@ def opt_mintime(reftrack: np.ndarray,
     if pars["pwr_params_mintime"]["pwr_behavior"]:
 
         # Initialize e-machine object
-        machine = opt_mintime_traj.powertrain_src.src.EMachine.EMachineModel(pwr_pars=pars["pwr_params_mintime"])
+        machine = powertrain.src.EMachine.EMachineModel(pwr_pars=pars["pwr_params_mintime"])
 
         # Initialize battery object
-        batt = opt_mintime_traj.powertrain_src.src.Battery.BattModel(pwr_pars=pars["pwr_params_mintime"])
+        batt = powertrain.src.Battery.BattModel(pwr_pars=pars["pwr_params_mintime"])
 
         # Initialize inverter object
-        inverter = opt_mintime_traj.powertrain_src.src.Inverter.InverterModel(pwr_pars=pars["pwr_params_mintime"])
+        inverter = powertrain.src.Inverter.InverterModel(pwr_pars=pars["pwr_params_mintime"])
 
         # Initialize radiator objects (2 in total)
-        radiators = opt_mintime_traj.powertrain_src.src.Radiators.RadiatorModel(pwr_pars=pars["pwr_params_mintime"])
+        radiators = powertrain.src.Radiators.RadiatorModel(pwr_pars=pars["pwr_params_mintime"])
 
         # scaling factors for state variables
         x_s = np.array([v_s, beta_s, omega_z_s, n_s, xi_s,
@@ -977,38 +980,38 @@ def opt_mintime(reftrack: np.ndarray,
     # ------------------------------------------------------------------------------------------------------------------
 
     # export data to CSVs
-    opt_mintime_traj.src.export_mintime_solution.export_mintime_solution(file_path=export_path,
-                                                                         pars=pars,
-                                                                         s=s_opt,
-                                                                         t=t_opt,
-                                                                         x=x_opt,
-                                                                         u=u_opt,
-                                                                         tf=tf_opt,
-                                                                         ax=ax_opt,
-                                                                         ay=ay_opt,
-                                                                         atot=atot_opt,
-                                                                         w0=sol["x"],
-                                                                         lam_x0=sol["lam_x"],
-                                                                         lam_g0=sol["lam_g"],
-                                                                         pwr=pwr_comps)
+    export_mintime_solution.export_mintime_solution(file_path=export_path,
+                                                    pars=pars,
+                                                    s=s_opt,
+                                                    t=t_opt,
+                                                    x=x_opt,
+                                                    u=u_opt,
+                                                    tf=tf_opt,
+                                                    ax=ax_opt,
+                                                    ay=ay_opt,
+                                                    atot=atot_opt,
+                                                    w0=sol["x"],
+                                                    lam_x0=sol["lam_x"],
+                                                    lam_g0=sol["lam_g"],
+                                                    pwr=pwr_comps)
 
     # ------------------------------------------------------------------------------------------------------------------
     # PLOT & PRINT RESULTS ---------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
 
     if plot_debug:
-        opt_mintime_traj.src.result_plots_mintime.result_plots_mintime(pars=pars,
-                                                                       reftrack=reftrack,
-                                                                       s=s_opt,
-                                                                       t=t_opt,
-                                                                       x=x_opt,
-                                                                       u=u_opt,
-                                                                       ax=ax_opt,
-                                                                       ay=ay_opt,
-                                                                       atot=atot_opt,
-                                                                       tf=tf_opt,
-                                                                       ec=ec_opt_cum,
-                                                                       pwr=pwr_comps)
+        result_plots_mintime.result_plots_mintime(pars=pars,
+                                                  reftrack=reftrack,
+                                                  s=s_opt,
+                                                  t=t_opt,
+                                                  x=x_opt,
+                                                  u=u_opt,
+                                                  ax=ax_opt,
+                                                  ay=ay_opt,
+                                                  atot=atot_opt,
+                                                  tf=tf_opt,
+                                                  ec=ec_opt_cum,
+                                                  pwr=pwr_comps)
 
     if print_debug:
         print("INFO: Laptime: %.3fs" % t_opt[-1])
