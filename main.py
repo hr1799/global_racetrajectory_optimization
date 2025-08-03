@@ -12,7 +12,7 @@ from scipy.signal import savgol_filter
 from skimage.morphology import skeletonize
 from skimage.segmentation import watershed
 
-from racetrajectory_optimization.mincurv_trajectory_optimizer import trajectory_optimizer
+from mincurv_trajectory_optimizer import trajectory_optimizer
 import helper_funcs_glob
 import trajectory_planning_helpers as tph
 
@@ -151,11 +151,13 @@ class GlobalPlanner():
             plt.show()
 
         # Write centerline in a csv file
-        centerline_fp = self.output_path + self.map_name + '_centerline.csv'
-        self.write_centerline(cent_with_dist, centerline_fp)
-
         if self.only_centerline:
-            return
+            centerline_fp = self.output_path + self.map_name + '_centerline.csv'
+            output = np.column_stack((cent_with_dist, centerline_nvecs))
+            np.savetxt(centerline_fp, output, delimiter=',')
+        else:
+            centerline_fp = self.output_path + self.map_name + '_centerline.csv'
+            np.savetxt(centerline_fp, cent_with_dist, delimiter=',')
 
         ################################################################################################################
         # Compute global trajectory with mincurv_iqp optimization
@@ -224,9 +226,6 @@ class GlobalPlanner():
 
         output = np.column_stack((global_trajectory_iqp, raceline_with_dist[:, 2:4], nvecs))
         np.savetxt(self.output_path + self.map_name + '_raceline.csv', output, delimiter=',')
-
-        output = np.column_stack((cent_with_dist, centerline_nvecs))
-        np.savetxt(centerline_fp, output, delimiter=',')
 
         # plot the global trajectory
         fig, ax = plt.subplots()
@@ -626,18 +625,6 @@ class GlobalPlanner():
         centerline_comp[:, 2] = width_track_right 
         centerline_comp[:, 3] = width_track_left 
         return centerline_comp
-
-    @staticmethod
-    def write_centerline(centerline: np.ndarray, map_name: str):
-        with open(map_name, 'w', newline='') as file:
-            writer = csv.writer(file)
-            for row in centerline:
-                x_m = row[0]
-                y_m = row[1]
-                width_tr_right_m = row[2]
-                width_tr_left_m = row[3]
-                writer.writerow([x_m, y_m, width_tr_right_m, width_tr_left_m])
-        print("Centerline written to: {}".format(map_name))
 
     @staticmethod
     def same_direction(alpha: float, beta: float) -> bool:

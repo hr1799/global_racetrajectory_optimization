@@ -19,7 +19,6 @@ the optimized trajectory, the track boundaries, and the lap time.
         
 def trajectory_optimizer(pkg_dir: str,
                          centerline_fp: str,
-                         iqp: bool = False,
                          safety_width: float = 0.8,
                          plot: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
@@ -28,7 +27,6 @@ def trajectory_optimizer(pkg_dir: str,
     Parameters:
     - pkg_dir (str): The package directory where the inputs, params, and outputs are located.
     - centerline_fp (str): The file path to the centerline of the track.
-    - iqp (bool): Whether to use the IQP method for optimization. Default is False.
     - safety_width (float): The safety width for the trajectory. Default is 0.8.
     - plot (bool): Whether to plot the optimized trajectory. Default is False.
 
@@ -62,14 +60,6 @@ def trajectory_optimizer(pkg_dir: str,
                 "min_track_width": None,                # [m] minimum enforced track width (set None to deactivate)
                 "num_laps": 1}                          # number of laps to be driven (significant with powertrain-option),
                                                         # only relevant in mintime-optimization
-    
-    # lap time calculation table ---------------------------------------------------------------------------------------
-    lap_time_mat_opts = {"use_lap_time_mat": False,             # calculate a lap time matrix (top speeds and scales)
-                         "gg_scale_range": [0.3, 1.0],          # range of gg scales to be covered
-                         "gg_scale_stepsize": 0.05,             # step size to be applied
-                         "top_speed_range": [100.0, 150.0],     # range of top speeds to be simulated [in km/h]
-                         "top_speed_stepsize": 5.0,             # step size to be applied
-                         "file": "lap_time_matrix.csv"}         # file name of the lap time matrix (stored in "outputs")
 
     # ------------------------------------------------------------------------------------------------------------------
     # INITIALIZATION OF PATHS ------------------------------------------------------------------------------------------
@@ -87,8 +77,6 @@ def trajectory_optimizer(pkg_dir: str,
     # assemble export paths
     file_paths["traj_race_export"] = os.path.join(file_paths["module"], "outputs", "traj_race_cl.csv")
     file_paths["mintime_export"] = os.path.join(file_paths["module"], "outputs", "mintime")
-
-    file_paths["lap_time_mat_export"] = os.path.join(file_paths["module"], "outputs", lap_time_mat_opts["file"])
 
     # ------------------------------------------------------------------------------------------------------------------
     # IMPORT VEHICLE DEPENDENT PARAMETERS ------------------------------------------------------------------------------
@@ -146,27 +134,13 @@ def trajectory_optimizer(pkg_dir: str,
     # CALL OPTIMIZATION ------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
 
-    if not iqp:
-        alpha_opt = tph.opt_min_curv.opt_min_curv(reftrack=reftrack_interp,
-                                                  normvectors=normvec_normalized_interp,
-                                                  A=a_interp,
-                                                  kappa_bound=pars["veh_params"]["curvlim"],
-                                                  w_veh=safety_width,
-                                                  print_debug=debug,
-                                                  plot_debug=False)[0]
-
-    else:
-        alpha_opt, reftrack_interp, normvec_normalized_interp = tph.iqp_handler.\
-            iqp_handler(reftrack=reftrack_interp,
-                        normvectors=normvec_normalized_interp,
-                        A=a_interp,
-                        kappa_bound=pars["veh_params"]["curvlim"],
-                        w_veh=safety_width,
-                        print_debug=debug,
-                        plot_debug=plot_opts["mincurv_curv_lin"],
-                        stepsize_interp=pars["stepsize_opts"]["stepsize_reg"],
-                        iters_min=pars["optim_opts"]["iqp_iters_min"],
-                        curv_error_allowed=pars["optim_opts"]["iqp_curverror_allowed"])
+    alpha_opt = tph.opt_min_curv.opt_min_curv(reftrack=reftrack_interp,
+                                                normvectors=normvec_normalized_interp,
+                                                A=a_interp,
+                                                kappa_bound=pars["veh_params"]["curvlim"],
+                                                w_veh=safety_width,
+                                                print_debug=debug,
+                                                plot_debug=False)[0]
 
     # ------------------------------------------------------------------------------------------------------------------
     # INTERPOLATE SPLINES TO SMALL DISTANCES BETWEEN RACELINE POINTS ---------------------------------------------------
@@ -231,66 +205,6 @@ def trajectory_optimizer(pkg_dir: str,
         plt.legend(["vx in m/s", "ax in m/s2", "t in s"])
 
         plt.show()
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # CALCULATE LAP TIMES (AT DIFFERENT SCALES AND TOP SPEEDS) ---------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-
-    if lap_time_mat_opts["use_lap_time_mat"]:
-        # simulate lap times
-        ggv_scales = np.linspace(lap_time_mat_opts['gg_scale_range'][0],
-                                 lap_time_mat_opts['gg_scale_range'][1],
-                                 int((lap_time_mat_opts['gg_scale_range'][1] - lap_time_mat_opts['gg_scale_range'][0])
-                                     / lap_time_mat_opts['gg_scale_stepsize']) + 1)
-        top_speeds = np.linspace(lap_time_mat_opts['top_speed_range'][0] / 3.6,
-                                 lap_time_mat_opts['top_speed_range'][1] / 3.6,
-                                 int((lap_time_mat_opts['top_speed_range'][1] - lap_time_mat_opts['top_speed_range'][0])
-                                     / lap_time_mat_opts['top_speed_stepsize']) + 1)
-
-        # setup results matrix
-        lap_time_matrix = np.zeros((top_speeds.shape[0] + 1, ggv_scales.shape[0] + 1))
-
-        # write parameters in first column and row
-        lap_time_matrix[1:, 0] = top_speeds * 3.6
-        lap_time_matrix[0, 1:] = ggv_scales
-
-        for i, top_speed in enumerate(top_speeds):
-            for j, ggv_scale in enumerate(ggv_scales):
-                tph.progressbar.progressbar(i*ggv_scales.shape[0] + j,
-                                            top_speeds.shape[0] * ggv_scales.shape[0],
-                                            prefix="Simulating laptimes ")
-
-                ggv_mod = np.copy(ggv)
-                ggv_mod[:, 1:] *= ggv_scale
-
-                vx_profile_opt = tph.calc_vel_profile.\
-                    calc_vel_profile(ggv=ggv_mod,
-                                     ax_max_machines=ax_max_machines,
-                                     v_max=top_speed,
-                                     kappa=kappa_opt,
-                                     el_lengths=el_lengths_opt_interp,
-                                     dyn_model_exp=pars["vel_calc_opts"]["dyn_model_exp"],
-                                     filt_window=pars["vel_calc_opts"]["vel_profile_conv_filt_window"],
-                                     closed=True,
-                                     drag_coeff=pars["veh_params"]["dragcoeff"],
-                                     m_veh=pars["veh_params"]["mass"])
-
-                # calculate longitudinal acceleration profile
-                vx_profile_opt_cl = np.append(vx_profile_opt, vx_profile_opt[0])
-                ax_profile_opt = tph.calc_ax_profile.calc_ax_profile(vx_profile=vx_profile_opt_cl,
-                                                                     el_lengths=el_lengths_opt_interp,
-                                                                     eq_length_output=False)
-
-                # calculate lap time
-                t_profile_cl = tph.calc_t_profile.calc_t_profile(vx_profile=vx_profile_opt,
-                                                                 ax_profile=ax_profile_opt,
-                                                                 el_lengths=el_lengths_opt_interp)
-
-                # store entry in lap time matrix
-                lap_time_matrix[i + 1, j + 1] = t_profile_cl[-1]
-                
-        # store lap time matrix to file
-        np.savetxt(file_paths["lap_time_mat_export"], lap_time_matrix, delimiter=",", fmt="%.3f")
 
     # ------------------------------------------------------------------------------------------------------------------
     # DATA POSTPROCESSING ----------------------------------------------------------------------------------------------
