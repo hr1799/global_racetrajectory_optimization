@@ -22,10 +22,8 @@ class GlobalPlanner():
         self.pkg_dir = "/home/hariharan/roboracer/racetrajectory_optimization/"
         self.output_path = self.pkg_dir + "outputs/mincurv/"
         os.makedirs(self.output_path, exist_ok=True)
-        self.safety_width = 0.3  # [m] including the width of the car
+        self.safety_width = 0.35  # [m] including the width of the car
         self.map_name = "porto"
-        # self.map_name = "levine"
-        # self.map_img_ext = '.pgm'
         self.map_img_ext = '.png'
         self.map_dir = "/home/hariharan/roboracer/roboracer_sim/maps"
 
